@@ -1,0 +1,89 @@
+// AssetTrace - Prisma schema
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Pengguna sistem (admin & user biasa)
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String // hashed dengan bcrypt
+  role      String   @default("user") // "admin" | "user"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  borrowedAssets UniqueAsset[] @relation("BorrowedBy")
+  logs           LogEntry[]
+
+  @@map("users")
+}
+
+/// Aset unik / per-unit (laptop, monitor, dll) yang bisa dipinjam
+model UniqueAsset {
+  id           String    @id @default(uuid())
+  name         String
+  category     String
+  serialNumber String    @unique
+  status       String    @default("available") // "available" | "borrowed" | "retired"
+  location     String
+  site         String
+
+  borrowedById String?
+  borrowedBy   User?     @relation("BorrowedBy", fields: [borrowedById], references: [id], onDelete: SetNull)
+  borrowedAt   DateTime?
+  returnDue    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("unique_assets")
+  @@index([site])
+  @@index([status])
+}
+
+/// Aset habis-pakai / stok (tinta, kabel, kertas, dll)
+model ConsumableAsset {
+  id       String @id @default(uuid())
+  name     String
+  category String
+  unit     String
+  quantity Int    @default(0)
+  minStock Int    @default(0)
+  location String
+  site     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("consumable_assets")
+  @@index([site])
+}
+
+/// Riwayat seluruh transaksi (borrow, return, stock-in, stock-out)
+model LogEntry {
+  id        String   @id @default(uuid())
+  type      String // "borrow" | "return" | "stock-in" | "stock-out"
+  assetKind String // "unique" | "consumable"
+  assetId   String
+  assetName String
+  serial    String?
+  quantity  Int?
+  note      String?
+  timestamp DateTime @default(now())
+
+  userId   String?
+  user     User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName String // disimpan terpisah agar tetap ada walau user dihapus
+
+  @@map("log_entries")
+  @@index([timestamp])
+  @@index([assetKind])
+}
